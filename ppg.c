@@ -2,10 +2,17 @@
 #include <SDL2/SDL.h>
 #include <stdbool.h>
 #include <stdint.h>
+#include <math.h>
 #include "vector.h"
 #include "mesh.h"
 #include "triangle.h"
+#include "matrix.h"
 
+// Define constants
+#define N_MESH_FACES 12
+#define FPS 60
+#define FRAME_TARGET_TIME (1000 / FPS)
+// Global variables
 SDL_Renderer *renderer = NULL;
 SDL_Window *window = NULL;
 SDL_Texture *texture = NULL;
@@ -13,24 +20,56 @@ uint32_t *color_buffer = NULL;
 bool is_running = false;
 int window_width;
 int window_height;
+int scaling_factor = 700;
+int previous_frame_time = 0;
+
+// Define functions
+bool initialize_windowing_system();
+void clean_up_windowing_system();
+void process_keyboard_input();
+void setup_memory_buffer();
+void clear_color_buffer(uint32_t color);
 void draw_pixel(int x, int y, uint32_t color);
 void draw_line(int x0, int y0, int x1, int y1, uint32_t color);
 void draw_triangle(int x0, int y0, int x1, int y1, int x2, int y2, uint32_t color);
 void draw_rectangle(int x, int y, int width, int height, uint32_t color);
-bool initialize_windowing_system();
-void clean_up_windowing_system();
-void project_model(void);
+void project_model();
+void update_state();
+vec2_t perspective_projection_point(vec3_t point_3d);
+vec3_t vec3_rotate_z(vec3_t v, float angle);
+vec3_t vec3_rotate_y(vec3_t v, float angle);
+vec3_t vec3_rotate_x(vec3_t v, float angle);
+float vec3_length(vec3_t v);
+vec3_t vec3_add(vec3_t a, vec3_t b);
+vec3_t vec3_sub(vec3_t a, vec3_t b);
+vec3_t vec3_mul(vec3_t v, float scalar);
+vec3_t vec3_div(vec3_t v, float scalar);
+vec3_t vec3_cross(vec3_t a, vec3_t b);
+float vec3_dot(vec3_t a, vec3_t b);
+float vec2_length(vec2_t v);
+vec2_t vec2_add(vec2_t a, vec2_t b);
+vec2_t vec2_sub(vec2_t a, vec2_t b);
+vec2_t vec2_mul(vec2_t v, float scalar);
+vec2_t vec2_div(vec2_t v, float scalar);
+float vec2_dot(vec2_t a, vec2_t b);
+mat4_t mat4_identity();
+mat4_t mat4_make_scale(float sx, float sy, float sz);
+mat4_t mat4_make_translate(float tx, float ty, float tz);
+mat4_t mat4_make_rotation_x(float angle);
+mat4_t mat4_make_rotation_y(float angle);
+mat4_t mat4_make_rotation_z(float angle);
+vec4_t mat4_mul_vec4(mat4_t M, vec4_t v);
+vec4_t vec4_from_vec3(vec3_t v);
+vec3_t vec3_from_vec4(vec4_t v);
 
-int scaling_factor = 700;
-int previous_frame_time = 0;
-
-#define FPS 60
-#define FRAME_TARGET_TIME (1000 / FPS)
-
+// Global variables for the cube
 vec3_t camera_position = {.x = 0, .y = 0, .z = 0};
 int t_cnt = 0;
-vec3_t cube_rotation = {.x = 0, .y = 0, .z = 0};
 triangle_t triangles_to_render[1000];
+
+vec3_t cube_scale = {.x = 1, .y = 1, .z = 1};
+vec3_t cube_translate = {.x = 1, .y = 1, .z = 7};
+vec3_t cube_rotation = {.x = 0, .y = 0, .z = 0};
 
 vec3_t mesh_vertices[8] = {
     {.x = -1, .y = -1, .z = -1}, // 1
@@ -151,21 +190,28 @@ void draw_triangle(int x0, int y0, int x1, int y1, int x2, int y2, uint32_t colo
 
 void draw_line(int x0, int y0, int x1, int y1, uint32_t color)
 {
-    int delta_x = x1 - x0;
-    int delta_y = y1 - y0;
+    int dx = abs(x1 - x0), sx = x0 < x1 ? 1 : -1;
+    int dy = -abs(y1 - y0), sy = y0 < y1 ? 1 : -1;
+    int err = dx + dy, e2; /* error value e_xy */
 
-    int steps = abs(delta_x) >= abs(delta_y) ? abs(delta_x) : abs(delta_y);
-
-    float x_inc = delta_x / (float)steps;
-    float y_inc = delta_y / (float)steps;
-
-    float cur_x = x0;
-    float cur_y = y0;
-    for (int i = 0; i < steps; i++)
-    {
-        draw_pixel(round(cur_x), round(cur_y), color);
-        cur_x += x_inc;
-        cur_y += y_inc;
+    for (;;)
+    { /* loop */
+        draw_pixel(x0, y0, 0xFFFFFFFF);
+        if (x0 == x1 && y0 == y1)
+        {
+            break;
+        }
+        e2 = 2 * err;
+        if (e2 >= dy)
+        {
+            err += dy;
+            x0 += sx;
+        } /* e_xy+e_x > 0 */
+        if (e2 <= dx)
+        {
+            err += dx;
+            y0 += sy;
+        } /* e_xy+e_y < 0 */
     }
 }
 
@@ -205,24 +251,32 @@ void project_model(void)
         face_vertices[1] = mesh_vertices[mesh_face.b - 1];
         face_vertices[2] = mesh_vertices[mesh_face.c - 1];
 
-        // New array to store transformed vertices
+        mat4_t scale_matrix = mat4_make_scale(cube_scale.x, cube_scale.y, cube_scale.z);
+        mat4_t rotation_matrix_x = mat4_make_rotation_x(cube_rotation.x); // pass the angle as float
+        mat4_t rotation_matrix_y = mat4_make_rotation_y(cube_rotation.y);
+        mat4_t rotation_matrix_z = mat4_make_rotation_z(cube_rotation.z);
+        mat4_t translate_matrix = mat4_make_translate(cube_translate.x, cube_translate.y, cube_translate.z);
+
         vec3_t transformed_vertices[3];
+
+        mat4_t world_matrix = mat4_identity();
+        world_matrix = mat4_mul_mat4(scale_matrix, world_matrix);
+        world_matrix = mat4_mul_mat4(rotation_matrix_x, world_matrix);
+        world_matrix = mat4_mul_mat4(rotation_matrix_y, world_matrix);
+        world_matrix = mat4_mul_mat4(rotation_matrix_z, world_matrix);
+        world_matrix = mat4_mul_mat4(translate_matrix, world_matrix);
 
         /* TRANSFORMAION */
         // Sub Loop, apply transformations to each vertex of the current face
         for (int j = 0; j < 3; j++)
         {
-            vec3_t transformed_vertex = face_vertices[j];
 
-            transformed_vertex = vec3_rotate_x(transformed_vertex, cube_rotation.x);
-            transformed_vertex = vec3_rotate_y(transformed_vertex, cube_rotation.y);
-            transformed_vertex = vec3_rotate_z(transformed_vertex, cube_rotation.z);
+            vec4_t transformed_vertex = vec4_from_vec3(face_vertices[j]);
 
-            // translate the vertex away from the camera
-            transformed_vertex.z += 5;
+            // all we need is this singlue transofrmation
+            transformed_vertex = mat4_mul_vec4(world_matrix, transformed_vertex);
 
-            // save transformed vertex in an array of transformed vertices
-            transformed_vertices[j] = transformed_vertex;
+            transformed_vertices[j] = vec3_from_vec4(transformed_vertex);
         }
 
         /* BACKFACE CULLING  */
@@ -272,9 +326,18 @@ void project_model(void)
 
 void update_state()
 {
+    // rotation
     cube_rotation.x += 0.01;
     cube_rotation.y += 0.01;
     cube_rotation.z += 0.01;
+
+    // transforming
+    cube_translate.y += .009;
+    cube_translate.x += .03;
+    cube_scale.x -= .01;
+    cube_scale.y -= .01;
+    cube_scale.z += .01;
+
     int time_to_wait = FRAME_TARGET_TIME - (SDL_GetTicks() - previous_frame_time);
 
     if (time_to_wait > 0 && time_to_wait <= FRAME_TARGET_TIME)
@@ -292,7 +355,7 @@ void update_state()
     for (int i = 0; i < t_cnt; i++)
     {
         triangle_t triangle = triangles_to_render[i];
-        draw_rectangle(triangle.points[0].x, triangle.points[0].y, 2,2, 0xFF00FF00);
+        draw_rectangle(triangle.points[0].x, triangle.points[0].y, 2, 2, 0xFF00FF00);
         draw_rectangle(triangle.points[1].x, triangle.points[1].y, 2, 2, 0xFF00FF00);
         draw_rectangle(triangle.points[2].x, triangle.points[2].y, 2, 2, 0xFF00FF00);
         draw_triangle(
@@ -436,6 +499,143 @@ vec2_t vec2_div(vec2_t v, float scalar)
 float vec2_dot(vec2_t a, vec2_t b)
 {
     return (a.x * b.x) + (a.y * b.y);
+}
+
+mat4_t mat4_identity(void)
+{
+
+    mat4_t m = {{{1, 0, 0, 0},
+                 {0, 1, 0, 0},
+                 {0, 0, 1, 0},
+                 {0, 0, 0, 1}}};
+
+    return m;
+}
+
+mat4_t mat4_make_scale(float sx, float sy, float sz)
+{
+    // | sx  0  0  0 |
+    // |  0 sy  0  0 |
+    // |  0  0 sz  0 |
+    // |  0  0  0  1 |
+    mat4_t m = mat4_identity();
+    m.m[0][0] = sx;
+    m.m[1][1] = sy;
+    m.m[2][2] = sz;
+
+    return m;
+}
+
+mat4_t mat4_make_translate(float tx, float ty, float tz)
+{
+    // | 1  0  0  tx |
+    // |  0 1  0  ty |
+    // |  0  0 1  tz |
+    // |  0  0  0  1 |
+
+    mat4_t M = mat4_identity();
+
+    M.m[0][3] = tx;
+    M.m[1][3] = ty;
+    M.m[2][3] = tz;
+
+    return M;
+}
+
+mat4_t mat4_make_rotation_x(float angle)
+{
+    float c = cos(angle);
+    float s = sin(angle);
+
+    // | 1  0   0  0 |
+    // | 0  c  -s  0 |
+    // | 0  s   c  0 |
+    // | 0  0   0  1 |
+
+    mat4_t M = mat4_identity();
+    M.m[1][1] = c;
+    M.m[1][2] = -s;
+    M.m[2][1] = s;
+    M.m[2][2] = c;
+
+    return M;
+}
+
+mat4_t mat4_make_rotation_y(float angle)
+{
+    float c = cos(angle);
+    float s = sin(angle);
+
+    // |  c  0   s  0 |
+    // |  0  1   0  0 |
+    // | -s  s   c  0 |
+    // |  0  0   0  1 |
+
+    mat4_t M = mat4_identity();
+    M.m[0][0] = c;
+    M.m[0][2] = -s;
+    M.m[2][0] = s;
+    M.m[2][2] = c;
+
+    return M;
+}
+
+mat4_t mat4_make_rotation_z(float angle)
+{
+    float c = cos(angle);
+    float s = sin(angle);
+
+    // |  c  -s   0  0 |
+    // |  s   c   0  0 |
+    // |  0   0   0  0 |
+    // |  0   0   0  1 |
+
+    mat4_t M = mat4_identity();
+    M.m[0][0] = c;
+    M.m[0][2] = -s;
+    M.m[2][0] = s;
+    M.m[2][2] = c;
+
+    return M;
+}
+
+vec4_t mat4_mul_vec4(mat4_t M, vec4_t v)
+{
+    vec4_t result;
+    result.x = M.m[0][0] * v.x + M.m[0][1] * v.y + M.m[0][2] * v.z + M.m[0][3] * v.w;
+    result.y = M.m[1][0] * v.x + M.m[1][1] * v.y + M.m[1][2] * v.z + M.m[1][3] * v.w;
+    result.z = M.m[2][0] * v.x + M.m[2][1] * v.y + M.m[2][2] * v.z + M.m[2][3] * v.w;
+    result.w = M.m[3][0] * v.x + M.m[3][1] * v.y + M.m[3][2] * v.z + M.m[3][3] * v.w;
+
+    return result;
+}
+
+vec4_t vec4_from_vec3(vec3_t v)
+{
+    vec4_t result = {v.x, v.y, v.z, 1.0};
+
+    return result;
+}
+
+vec3_t vec3_from_vec4(vec4_t v)
+{
+    vec3_t result = {v.x, v.y, v.z};
+
+    return result;
+}
+
+mat4_t mat4_mul_mat4(mat4_t A, mat4_t B)
+{
+    mat4_t M;
+    // apply dot product betwwen rows and colums for every position of the matrix.
+    // loop all rows and columns
+    for (int i = 0; i < 4; i++)
+        for (int j = 0; j < 4; j++)
+            M.m[i][j] = (A.m[i][0] * B.m[0][j]) +
+                        (A.m[i][1] * B.m[1][j]) +
+                        (A.m[i][2] * B.m[2][j]) +
+                        (A.m[i][3] * B.m[3][j]);
+    return M;
 }
 
 void run_render_pipeline()
