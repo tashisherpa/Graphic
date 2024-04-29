@@ -322,37 +322,7 @@ void project_model(void)
         // save the projected triangle
         triangles_to_render[t_cnt++] = projected_triangle;
     }
-}
-
-void update_state()
-{
-    // rotation
-    cube_rotation.x += 0.01;
-    cube_rotation.y += 0.01;
-    cube_rotation.z += 0.01;
-
-    // transforming
-    cube_translate.y += .009;
-    cube_translate.x += .03;
-    cube_scale.x -= .01;
-    cube_scale.y -= .01;
-    cube_scale.z += .01;
-
-    int time_to_wait = FRAME_TARGET_TIME - (SDL_GetTicks() - previous_frame_time);
-
-    if (time_to_wait > 0 && time_to_wait <= FRAME_TARGET_TIME)
-    {
-        SDL_Delay((Uint32)time_to_wait);
-    }
-
-    // Update previous_frame_time after the delay
-    previous_frame_time = SDL_GetTicks();
-
-    clear_color_buffer(0xFF000000);
-
-    project_model();
-
-    for (int i = 0; i < t_cnt; i++)
+     for (int i = 0; i < t_cnt; i++)
     {
         triangle_t triangle = triangles_to_render[i];
         draw_rectangle(triangle.points[0].x, triangle.points[0].y, 2, 2, 0xFF00FF00);
@@ -367,7 +337,6 @@ void update_state()
             triangle.points[2].y,
             0xFF00FF00);
     }
-
     t_cnt = 0;
 }
 
@@ -636,6 +605,35 @@ mat4_t mat4_mul_mat4(mat4_t A, mat4_t B)
                         (A.m[i][2] * B.m[2][j]) +
                         (A.m[i][3] * B.m[3][j]);
     return M;
+}
+
+void update_state()
+{
+    // rotation
+    cube_rotation.x += 0.01;
+    cube_rotation.y += 0.01;
+    cube_rotation.z += 0.01;
+
+    // transforming
+    cube_translate.y += .009;
+    cube_translate.x += .03;
+    cube_scale.x -= .01;
+    cube_scale.y -= .01;
+    cube_scale.z += .01;
+
+    int time_to_wait = FRAME_TARGET_TIME - (SDL_GetTicks() - previous_frame_time);
+
+    if (time_to_wait > 0 && time_to_wait <= FRAME_TARGET_TIME)
+    {
+        SDL_Delay((Uint32)time_to_wait);
+    }
+
+    // Update previous_frame_time after the delay
+    previous_frame_time = SDL_GetTicks();
+
+    clear_color_buffer(0xFF000000);
+
+    project_model();
 }
 
 void run_render_pipeline()
