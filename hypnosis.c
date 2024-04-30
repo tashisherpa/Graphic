@@ -19,6 +19,7 @@ int window_height;
 
 int scaling_factor = 700;
 int previous_frame_time = 0;
+bool isEnable = true;
 
 #define FPS 60
 #define FRAME_TARGET_TIME (1000 / FPS)
@@ -36,6 +37,19 @@ void draw_pixel(int x, int y, uint32_t color);
 void update_state();
 void run_render_pipeline();
 void project_pyramid(); // Declaration of the function
+
+// Array of colors
+uint32_t colors[] = {
+    0xFF0000FF, // Blue
+    0xFFFF0000, // Red
+    0xFF00FF00, // Green
+    0xFFFFFF00, // Yellow
+    0xFFFF00FF, // Purple
+    0xFF00FFFF, // Cyan
+    0xFF800080, // Purple
+    0xFFFFA500, // Orange
+};
+int num_colors = sizeof(colors) / sizeof(colors[0]);
 
 // Global variables for the cube
 vec3_t camera_position = {.x = 0, .y = 0, .z = 0};
@@ -130,6 +144,60 @@ void draw_triangle(int x0, int y0, int x1, int y1, int x2, int y2, uint32_t colo
     draw_line(x1, y1, x2, y2, color);
     draw_line(x2, y2, x0, y0, color);
 }
+
+void draw_sparkle_pixel(int x, int y, uint32_t color)
+{
+    if (x >= 0 && x < window_width && y >= 0 && y < window_height)
+        color_buffer[(y * window_width) + x] = color;
+}
+
+void sparkle_bursts_animation()
+{
+    const int num_bursts = 50;          // Number of sparkle bursts
+    const int burst_duration = 500;     // Duration of each burst in milliseconds
+    const float explosion_speed = 5.0f; // Speed multiplier for explosion effect
+
+    for (int i = 0; i < num_bursts; i++)
+    {
+        int burst_x = rand() % window_width;
+        int burst_y = rand() % window_height;
+        uint32_t color = colors[rand() % num_colors]; // You can change this color to any color you like
+
+        for (float progress = 0.0f; progress < 1.0f; progress += 0.01f * explosion_speed)
+        {
+            int sparkle_radius = (int)(progress * 50); // Adjust the multiplier for the burst size
+
+            for (int angle_deg = 0; angle_deg < 360; angle_deg += 10) // Adjust the angle step for sparkles
+            {
+                float angle_rad = angle_deg * (M_PI / 180.0f);
+                int sparkle_x = burst_x + (int)(sparkle_radius * cos(angle_rad));
+                int sparkle_y = burst_y + (int)(sparkle_radius * sin(angle_rad));
+
+                // Calculate fade-out based on distance from burst center and progress
+                float distance_factor = 1.0f - (progress / 1.0f);
+                float fade_factor = distance_factor * distance_factor; // Square the distance_factor for a stronger fade-out effect
+                uint32_t faded_color = (color & 0x00FFFFFF) | ((uint32_t)(fade_factor * 255.0f) << 24);
+
+                draw_sparkle_pixel(sparkle_x, sparkle_y, faded_color);
+            }
+
+            SDL_UpdateTexture(texture, NULL, color_buffer, window_width * sizeof(uint32_t));
+            SDL_RenderClear(renderer);
+            SDL_RenderCopy(renderer, texture, NULL, NULL);
+            SDL_RenderPresent(renderer);
+
+            SDL_Delay(5); // Adjust the delay between frames for the explosion effect
+        }
+
+        // Clear the burst by redrawing the background color after the explosion ends
+        SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255); // Assuming black background
+        SDL_RenderClear(renderer);
+        SDL_RenderPresent(renderer);
+
+        SDL_Delay(100); // Delay before starting the next burst
+    }
+}
+
 
 vec3_t vec3_add(vec3_t a, vec3_t b)
 {
@@ -398,7 +466,8 @@ void setup_memory_buffer(void)
 
 void clear_color_buffer(uint32_t color, bool isEnable)
 {
-    if(isEnable){
+    if (isEnable)
+    {
         for (int i = 0; i < window_width * window_height; i++)
             color_buffer[i] = color;
     }
@@ -406,7 +475,7 @@ void clear_color_buffer(uint32_t color, bool isEnable)
 
 void update_state()
 {
-    clear_color_buffer(0xFF000000, true);
+    clear_color_buffer(0xFF000000, isEnable);
     run_render_pipeline();
 }
 
@@ -539,9 +608,10 @@ void update_pyramid_state(int start_time)
     project_pyramid();
 }
 
-void spinning_triangle()
+void spinning_flower(float flower_index)
 {
     float rotation_angle = 0.0f; // Initial rotation angle
+    int num_triangles = 10;      // Number of triangles in the flower
     int current_frame_time = SDL_GetTicks();
     float delta_time = (current_frame_time - previous_frame_time) / 2000.0f; // Convert milliseconds to seconds
 
@@ -549,36 +619,29 @@ void spinning_triangle()
     float rotation_speed = 0.5f; // Adjust rotation speed as needed
     rotation_angle += rotation_speed * delta_time;
 
-    // Calculate the coordinates of the vertices for an equilateral triangle
-    int triangle_size = 100;                                       // Size of the triangle
-    int x_center = window_width / 2;                               // x-coordinate of the center of the screen
-    int y_center = window_height / 2;                              // y-coordinate of the center of the screen
-    int half_triangle_height = (int)(triangle_size * sqrt(3) / 2); // Half of the height of the equilateral triangle
+    // Center of the screen
+    int x_center = (flower_index + 1) * (window_width / 4);
+    int y_center = window_height / 2;
 
-    // Calculate the coordinates of the vertices
-    int x0 = x_center;                            // x-coordinate of the top vertex
-    int y0 = y_center - half_triangle_height;     // y-coordinate of the top vertex
-    int x1 = x_center + triangle_size / 2;        // x-coordinate of the bottom-right vertex
-    int y1 = y_center + half_triangle_height / 2; // y-coordinate of the bottom-right vertex
-    int x2 = x_center - triangle_size / 2;        // x-coordinate of the bottom-left vertex
-    int y2 = y_center + half_triangle_height / 2; // y-coordinate of the bottom-left vertex
+    // Radius of the flower
+    int radius = 100 + flower_index * 50;
 
-    // Apply rotation transformation to the triangle vertices
-    float cos_angle = cos(rotation_angle);
-    float sin_angle = sin(rotation_angle);
+    for (int i = 0; i < num_triangles; i++)
+    {
+        // Calculate the angle for this triangle
+        float angle = (2 * M_PI / num_triangles) * i + rotation_angle;
 
-    // Rotate each vertex of the triangle around the center of the screen
-    int rotated_x0 = cos_angle * (x0 - x_center) - sin_angle * (y0 - y_center) + x_center;
-    int rotated_y0 = sin_angle * (x0 - x_center) + cos_angle * (y0 - y_center) + y_center;
+        // Calculate the coordinates of the vertices for the triangle
+        int x0 = x_center;
+        int y0 = y_center;
+        int x1 = x_center + radius * cos(angle);
+        int y1 = y_center + radius * sin(angle);
+        int x2 = x_center + radius * cos(angle + 0.5 * M_PI);
+        int y2 = y_center + radius * sin(angle + 0.5 * M_PI);
 
-    int rotated_x1 = cos_angle * (x1 - x_center) - sin_angle * (y1 - y_center) + x_center;
-    int rotated_y1 = sin_angle * (x1 - x_center) + cos_angle * (y1 - y_center) + y_center;
-
-    int rotated_x2 = cos_angle * (x2 - x_center) - sin_angle * (y2 - y_center) + x_center;
-    int rotated_y2 = sin_angle * (x2 - x_center) + cos_angle * (y2 - y_center) + y_center;
-
-    // Draw the equilateral triangle with the rotated vertices
-    draw_triangle(rotated_x0, rotated_y0, rotated_x1, rotated_y1, rotated_x2, rotated_y2, 0xFF800080);
+        // Draw the triangle
+        draw_triangle(x0, y0, x1, y1, x2, y2, 0xFFFFFFFF);
+    }
 }
 
 int main()
@@ -598,84 +661,95 @@ int main()
     float zoomin_factor = 1.0f;
     float zoomin_speed = 0.005f;
 
-    // Array of colors
-    uint32_t colors[] = {
-        0xFF0000FF, // Blue
-        0xFFFF0000, // Red
-        0xFF00FF00, // Green
-        0xFFFFFF00, // Yellow
-        0xFFFF00FF, // Purple
-        0xFF00FFFF, // Cyan
-        0xFF800080, // Purple
-        0xFFFFA500, // Orange
-    };
-    int num_colors = sizeof(colors) / sizeof(colors[0]);
-
     setup_memory_buffer();
 
     while (is_running)
     {
         process_keyboard_input();
 
-        clear_color_buffer(0xFF000000, false);
+        isEnable = true;
+        clear_color_buffer(0xFF000000, isEnable);
 
         // Act 1: Scene 1
-        // int numRectangles = 19;
-        // for (int i = 0; i < numRectangles; ++i)
-        // {
-        //     int rectWidth = 10 * zoom_factor + (i * 80);
-        //     int rectHeight = 10 * zoom_factor + (i * 80);
-        //     int x = (window_width - rectWidth) / 2 - (numRectangles * 2);   // Adjust position to center vanishing point
-        //     int y = (window_height - rectHeight) / 2 - (numRectangles * 2); // Adjust position to center vanishing point
-        //     draw_hollow_rectangle(x, y, rectWidth, rectHeight, 0xFF00FF00);
-        //     zoom_factor += zoom_speed;
-        //     SDL_Delay(5);
-        //     if (rectWidth > (window_width + (i * 5)) && rectHeight > (window_height + (i * 5))) // Reset zoom for looping effect
-        //     {
-        //         if ((SDL_GetTicks() - start_time <= animation_duration_ms))
-        //         {
-        //             zoom_factor = 1.0f;
-        //         }
-        //         else if ((SDL_GetTicks() - start_time <= animation_duration_ms))
-        //         {
-        //             zoom_speed = 1.0f;
-        //         }
-        //     }
-        // }
-        // // Act 1: scene 2 and 3
-        // if ((SDL_GetTicks() - start_time >= 17000))
-        // {
-        //     const int numRects = 20;
-        //     for (int i = 0; i < numRects; ++i)
-        //     {
-        //         // Randomly select a color from the array
-        //         uint32_t color = colors[rand() % num_colors];
-        //         int rectWidth = window_width * zoomin_factor + (i * 40);
-        //         int rectHeight = 530 * zoomin_factor + (i * 40);
-        //         int x = (window_width - rectWidth) / 2 - (numRects * 2);   // Adjust position to center vanishing point
-        //         int y = (window_height - rectHeight) / 2 - (numRects * 2); // Adjust position to center vanishing point
-        //         draw_hollow_rectangle(x, y, rectWidth, rectHeight, color);
-        //         zoomin_factor -= zoomin_speed;
-        //     }
+        int numRectangles = 19;
+        for (int i = 0; i < numRectangles; ++i)
+        {
+            int rectWidth = 10 * zoom_factor + (i * 80);
+            int rectHeight = 10 * zoom_factor + (i * 80);
+            int x = (window_width - rectWidth) / 2 - (numRectangles * 2);   // Adjust position to center vanishing point
+            int y = (window_height - rectHeight) / 2 - (numRectangles * 2); // Adjust position to center vanishing point
+            draw_hollow_rectangle(x, y, rectWidth, rectHeight, 0xFF00FF00);
+            zoom_factor += zoom_speed;
+            SDL_Delay(5);
+            if (rectWidth > (window_width + (i * 5)) && rectHeight > (window_height + (i * 5))) // Reset zoom for looping effect
+            {
+                if ((SDL_GetTicks() - start_time <= animation_duration_ms))
+                {
+                    zoom_factor = 1.0f;
+                }
+                else if ((SDL_GetTicks() - start_time <= animation_duration_ms))
+                {
+                    zoom_speed = 1.0f;
+                }
+            }
+        }
 
-        //     if (zoomin_factor >= 2.0f) // Reset zoom for looping effect
-        //     {
-        //         zoomin_factor = 1.0f;
-        //     }
+        // Act 1: scene 2 and 3
+        if ((SDL_GetTicks() - start_time >= 17000) && (SDL_GetTicks() - start_time <= 24000))
+        {
+            const int numRects = 20;
+            for (int i = 0; i < numRects; ++i)
+            {
+                // Randomly select a color from the array
+                uint32_t color = colors[rand() % num_colors];
+                int rectWidth = window_width * zoomin_factor + (i * 40);
+                int rectHeight = 530 * zoomin_factor + (i * 40);
+                int x = (window_width - rectWidth) / 2 - (numRects * 2);   // Adjust position to center vanishing point
+                int y = (window_height - rectHeight) / 2 - (numRects * 2); // Adjust position to center vanishing point
+                draw_hollow_rectangle(x, y, rectWidth, rectHeight, color);
+                zoomin_factor -= zoomin_speed;
+            }
 
-        //     SDL_Delay(100);
-        // }
+            if (zoomin_factor >= 2.0f) // Reset zoom for looping effect
+            {
+                zoomin_factor = 1.0f;
+            }
 
-        // clear_color_buffer(0xFF000000, false);
+            SDL_Delay(100);
+        }
+
+        isEnable = false;
+        clear_color_buffer(0xFF000000, isEnable);
 
         // Act 2: Scene 1
-        // if ((SDL_GetTicks() - start_time >= 24000))
-        // {
-            // update_pyramid_state(start_time);
+        if ((SDL_GetTicks() - start_time >= 23000) && (SDL_GetTicks() - start_time <= 40000))
+        {
+            update_pyramid_state(start_time);
+            update_pyramid_state(start_time);
+        }
 
+        if ((SDL_GetTicks() - start_time >= 40000) && (SDL_GetTicks() - start_time <= 50000))
+        {
             // Act 2: Scene 2: Spinning triangle
-            spinning_triangle();
-        // }
+            // Draw each flower one by one
+            if (SDL_GetTicks() - start_time >= 40000)
+            {
+                spinning_flower(0);
+            }
+            if (SDL_GetTicks() - start_time >= 43000)
+            {
+                spinning_flower(0.85);
+            }
+            if (SDL_GetTicks() - start_time >= 47000)
+            {
+                spinning_flower(2);
+            }
+        }
+
+        if (SDL_GetTicks() - start_time >= 50000 && (SDL_GetTicks() - start_time <= 63000))
+        {
+            sparkle_bursts_animation();
+        }
 
         SDL_UpdateTexture(texture, NULL, color_buffer, (int)window_width * sizeof(uint32_t));
         SDL_RenderCopy(renderer, texture, NULL, NULL);
