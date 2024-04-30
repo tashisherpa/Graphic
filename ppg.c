@@ -71,15 +71,12 @@ vec3_t cube_scale = {.x = 1, .y = 1, .z = 1};
 vec3_t cube_translate = {.x = 1, .y = 1, .z = 7};
 vec3_t cube_rotation = {.x = 0, .y = 0, .z = 0};
 
-vec3_t mesh_vertices[8] = {
+vec3_t mesh_vertices[N_MESH_VERTICES] = {
     {.x = -1, .y = -1, .z = -1}, // 1
-    {.x = -1, .y = 1, .z = -1},  // 2
-    {.x = 1, .y = 1, .z = -1},   // 3
-    {.x = 1, .y = -1, .z = -1},  // 4
-    {.x = 1, .y = 1, .z = 1},    // 5
-    {.x = 1, .y = -1, .z = 1},   // 6
-    {.x = -1, .y = 1, .z = 1},   // 7
-    {.x = -1, .y = -1, .z = 1}   // 8
+    {.x = -1, .y = -1, .z = 1},  // 2
+    {.x = 1, .y = -1, .z = -1},   // 3
+    {.x = 1, .y = -1, .z = 1},    // 4
+    {.x = 0, .y = 1, .z = 0},     // 5
 };
 
 face_t mesh_faces[N_MESH_FACES] = {
