@@ -40,8 +40,8 @@ void project_pyramid(); // Declaration of the function
 
 // Array of colors
 uint32_t colors[] = {
-    0xFF0000FF, // Blue
-    0xFFFF0000, // Red
+    0xFF0000FF, // Red
+    0xFFFF0000, // Blue
     0xFF00FF00, // Green
     0xFFFFFF00, // Yellow
     0xFFFF00FF, // Purple
@@ -49,6 +49,9 @@ uint32_t colors[] = {
     0xFF800080, // Purple
     0xFFFFA500, // Orange
 };
+
+uint32_t string_color =  0xFF0000FF;// Red
+
 int num_colors = sizeof(colors) / sizeof(colors[0]);
 
 // Global variables for the cube
@@ -124,7 +127,7 @@ void draw_line(int x0, int y0, int x1, int y1, uint32_t color)
             err += dx;
             y0 += sy;
         } /* e_xy+e_y < 0 */
-        draw_pixel(x0, y0, 0xFFFFFFFF);
+        draw_pixel(x0, y0, color);
     }
 }
 
@@ -154,7 +157,6 @@ void draw_sparkle_pixel(int x, int y, uint32_t color)
 void sparkle_bursts_animation()
 {
     const int num_bursts = 50;          // Number of sparkle bursts
-    const int burst_duration = 500;     // Duration of each burst in milliseconds
     const float explosion_speed = 5.0f; // Speed multiplier for explosion effect
 
     for (int i = 0; i < num_bursts; i++)
@@ -197,7 +199,6 @@ void sparkle_bursts_animation()
         SDL_Delay(100); // Delay before starting the next burst
     }
 }
-
 
 vec3_t vec3_add(vec3_t a, vec3_t b)
 {
@@ -644,6 +645,81 @@ void spinning_flower(float flower_index)
     }
 }
 
+
+void red_string_of_fate_animation()
+{
+    const int line_growth_speed = 5;    // Adjust line growth speed as needed
+    const int heart_speed = 1;          // Adjust heart drawing speed as needed
+
+    int start_x = -100;                  // Starting x-coordinate of the line (left side of screen off screen)
+    int mid_x = window_width / 2;        // middle x-coordinate of the line (middle of the screen)
+    int end_x = window_width + 100;      // Ending x-coordinate of the line (right side of screen off screen)
+    int line_y = window_height / 2;      // Y-coordinate of the line (middle of the screen)
+    int heart_x = mid_x;                 // X-coordinate of the heart starts from the mid_x
+    int heart_y = window_height / 2 - 170; // Y-coordinate of the heart
+
+    // Grow the line from left to the middle of the screen
+    for (int x = start_x; x <= mid_x; x += line_growth_speed)
+    {
+        draw_line(start_x, line_y, x, line_y, string_color);
+        SDL_UpdateTexture(texture, NULL, color_buffer, (int)window_width * sizeof(uint32_t));
+        SDL_RenderCopy(renderer, texture, NULL, NULL);
+        SDL_RenderPresent(renderer);
+        SDL_Delay(10); // Adjust delay for line growth speed
+    }
+    
+    // Draw the heart shape starting from the bottom right and ending at the bottom left
+    for (int i = 180; i >= 0; i -= heart_speed)
+    {
+        float angle = i * 3.14159f / 180.0f;
+        int x = heart_x + 160 * (sin(angle) * sin(angle) * sin(angle)); // Increase scale for x-coordinate
+        int y = heart_y - 130 * cos(angle) + 50 * cos(2 * angle) + 20 * cos(3 * angle) + 10 * cos(4 * angle); // Increase scale for y-coordinate
+        draw_pixel(x-1, y+1, string_color);
+        draw_pixel(x-1, y-1, string_color); 
+        draw_pixel(x-1, y, string_color); // Draw the pixel to form the heart shape
+        draw_pixel(x, y, string_color); // Draw the pixel to form the heart shape
+        draw_pixel(x+1, y, string_color); // Draw the pixel to form the heart shape
+        draw_pixel(x+1, y-1, string_color); 
+        draw_pixel(x+1, y+1, string_color);
+        SDL_UpdateTexture(texture, NULL, color_buffer, (int)window_width * sizeof(uint32_t));
+        SDL_RenderCopy(renderer, texture, NULL, NULL);
+        SDL_RenderPresent(renderer);
+        SDL_Delay(10); // Adjust delay for heart drawing speed
+    }
+
+    for (int i = 360; i >= 180; i -= heart_speed)
+    {
+        float angle = i * 3.14159f / 180.0f;
+        int x = heart_x + 160 * (sin(angle) * sin(angle) * sin(angle)); // Increase scale for x-coordinate
+        int y = heart_y - 130 * cos(angle) + 50 * cos(2 * angle) + 20 * cos(3 * angle) + 10 * cos(4 * angle); // Increase scale for y-coordinate
+        
+        draw_pixel(x-1, y+1, string_color);
+        draw_pixel(x-1, y-1, string_color); 
+        draw_pixel(x-1, y, string_color);
+        draw_pixel(x, y, string_color);
+        draw_pixel(x+1, y, string_color);
+        draw_pixel(x+1, y-1, string_color); 
+        draw_pixel(x+1, y+1, string_color);
+
+        SDL_UpdateTexture(texture, NULL, color_buffer, (int)window_width * sizeof(uint32_t));
+        SDL_RenderCopy(renderer, texture, NULL, NULL);
+        SDL_RenderPresent(renderer);
+        SDL_Delay(10); // Adjust delay for heart drawing speed
+    }
+    
+    // Move the line to the left
+    for (int x = mid_x; x <= end_x; x += line_growth_speed)
+    {
+        draw_line(mid_x, line_y, x, line_y, string_color);
+        SDL_UpdateTexture(texture, NULL, color_buffer, (int)window_width * sizeof(uint32_t));
+        SDL_RenderCopy(renderer, texture, NULL, NULL);
+        SDL_RenderPresent(renderer);
+        SDL_Delay(10); // Adjust delay for line growth speed
+    }
+
+}
+
+
 int main()
 {
     is_running = initialize_windowing_system();
@@ -749,6 +825,11 @@ int main()
         if (SDL_GetTicks() - start_time >= 50000 && (SDL_GetTicks() - start_time <= 63000))
         {
             sparkle_bursts_animation();
+        }
+
+        if (SDL_GetTicks() - start_time >= 64000 && (SDL_GetTicks() - start_time <= 75000))
+        {
+            red_string_of_fate_animation();
         }
 
         SDL_UpdateTexture(texture, NULL, color_buffer, (int)window_width * sizeof(uint32_t));
